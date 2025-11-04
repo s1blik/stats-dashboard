@@ -1,11 +1,14 @@
 from dash import html, dcc
+from translation import translations
 
-sidebar = html.Div([
-    html.H2("Valikud", style={"padding": "10px"}),
+
+def sidebar_layout(lang="et"):
+    return html.Div([
+    html.H2(translations[lang]["sidebar.title"], style={"padding": "10px"}),
     html.Hr(),
-    dcc.Link("Gross monthly salary", href="/economy", style={"display": "block", "padding": "10px"}),
-    dcc.Link("Enviroment", href="/enviroment", style={"display": "block", "padding": "10px"}),
-    dcc.Link("Population", href="/population", style={"display": "block", "padding": "10px"}),
+    dcc.Link(translations[lang]["sidebar.salary"], href="/economy", style={"display": "block", "padding": "10px"}),
+    dcc.Link(translations[lang]["sidebar.env"], href="/enviroment", style={"display": "block", "padding": "10px"}),
+    dcc.Link(translations[lang]["sidebar.pop"], href="/population", style={"display": "block", "padding": "10px"}),
 ], style={
     "position": "fixed",
     "top": 0,
@@ -16,3 +19,5 @@ sidebar = html.Div([
     "padding": "20px",
     "overflow": "auto"
 })
+
+

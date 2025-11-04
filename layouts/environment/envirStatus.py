@@ -1,5 +1,9 @@
 from dash import html
+from translation import translations   # ← import siit
 
-envirstatus_layout = html.Div([
-    html.H3("Keskkonnastatistika – tulekul")
+def envirstatus_layout(lang="et"):
+
+ return html.Div([
+        html.H3(translations[lang]["envirstatus_header"]),
+
 ])
