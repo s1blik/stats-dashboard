@@ -4,6 +4,7 @@ import pandas as pd
 import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from utils.helpers import apply_common_legend
 from utils.stat_api import get_pa103_data
 from translation import translations   # ← import siit
 from dash import Input, Output, html, dcc
@@ -106,7 +107,7 @@ def salary_layout(lang="et"):
         ], style={"width": "30%", "marginBottom": "10px"}),
         html.Div([
             html.Label(translations[lang]["sector.label"]),
-            dcc.Dropdown(id="salary-emtak-dropdown")
+            dcc.Dropdown(id="salary-emtak-dropdown", multi=True)
         ], style={"width": "30%", "marginBottom": "10px"}),
 
         html.Div([
@@ -134,11 +135,13 @@ def register_salary_callbacks(app):
     
     def update_salary_filters(pathname, lang):
         opts = get_meta_options("PA103", lang)
-        
+        #print("metandmed", opts)
         indicator_map = {opt["value"]: opt["label"] for opt in opts["Näitaja"]}
+        #[{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + 
         indicator_opts = [{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + opts["Näitaja"]
         emtak_opts = opts["Tegevusala"]
-        year_opts = [{"label": translations[lang]["Allperiod.label"], "value": "ALL"}] + opts["Vaatlusperiood"]
+        #[{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + 
+        year_opts = [{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + opts["Vaatlusperiood"]
 
         return (
             indicator_opts, indicator_opts[1]["value"],  # vaikimisi esimene päris näitaja
@@ -147,7 +150,7 @@ def register_salary_callbacks(app):
 
     )
 
-# Graafiku uuendamine
+    # Graafiku uuendamine
 
     @app.callback(
         Output("salary-graph", "figure"),
@@ -166,47 +169,66 @@ def register_salary_callbacks(app):
 
         df = get_pa103_data(indicator=indicators, emtak=emtak, years=years, lang=lang)
 
+        #print("indikaatorid" , indicators)
+
         # Kui mõlemad näitajad korraga
-        if isinstance(indicators, list) and "GR_W_AVG" in indicators and "GR_W_D5" in indicators:
+        #if isinstance(indicators, list) and "GR_W_AVG" in indicators and "GR_W_D5" in indicators:
+        if indicator is None or indicator == "ALL":
+
             fig = make_subplots(specs=[[{"secondary_y": True}]])
 
             avg_df = df[df["näitaja"] == "GR_W_AVG"]
             med_df = df[df["näitaja"] == "GR_W_D5"]
             dif_df = df[df["näitaja"] == "GR_W_AVG_SM"]
+            
+            print(avg_df, med_df, dif_df)
+
+            # Keskmine ja mediaan vasakule teljele
+            fig.add_trace(
+                go.Bar(x=avg_df["aasta"], y=avg_df["väärtus"], name=avg_df["näitaja_nimi"].iloc[0]),
+                secondary_y=False
+            )
 
             fig.add_trace(
-                go.Bar(x=avg_df["aasta"], y=avg_df["väärtus"], name="Keskmine palk"),
+                go.Bar(x=med_df["aasta"], y=med_df["väärtus"], name=med_df["näitaja_nimi"].iloc[0]),
                 secondary_y=False
             )
+
+            # Muutus paremale teljele joonena
             fig.add_trace(
-                go.Bar(x=med_df["aasta"], y=med_df["väärtus"], name="Mediaan palk"),
-                secondary_y=False
-            )
-            fig.add_trace(
-                go.Scatter(x=med_df["aasta"], y=med_df["väärtus"], name="Palga muutus", mode="lines+markers"),
+                go.Scatter(x=dif_df["aasta"], y=dif_df["väärtus"],
+                        name=dif_df["näitaja_nimi"].iloc[0], mode="lines+markers"),                        
                 secondary_y=True
             )
 
-            fig.update_yaxes(title_text="Keskmine palk", secondary_y=False)
-            fig.update_yaxes(title_text="Mediaan palk", secondary_y=False)
-            fig.update_yaxes(title_text="Palga muutus", secondary_y=True)
+        # Telgede sildid
+            fig.update_yaxes(title_text=translations[lang]["salary.label"], secondary_y=False)
+            #title_text="Palga muutus (%)",
+            fig.update_yaxes(title_text="Palga muutus (%)",secondary_y=True)
+            
             fig.update_layout(title=translations[lang]["salary.title"])
-            return fig
+           
+            #legendi paigutus alla keskele
+            fig = apply_common_legend(fig, "h", -0.3, 0.5) 
 
         # Kui ainult üks näitaja
         else:
-            return px.bar(
-                df,
-                x="aasta",
-                y="väärtus",
-                color="näitaja_nimi",
-                barmode="group",
-                labels={
+            fig = px.bar(
+                  df,
+                  x="aasta",
+                  y="väärtus",
+                  color="näitaja_nimi",
+                  barmode="group",
+                  labels={
                     "väärtus": translations[lang]["salary.label"],
                     "aasta": translations[lang]["year.label"],
                     "näitaja_nimi": translations[lang]["indicator.label"]
                 }
             )
+        # Legend alla keskele
+        fig = apply_common_legend(fig, "h", -0.3, 0.5)  
+        return fig
+
 
 
 

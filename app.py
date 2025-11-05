@@ -40,7 +40,7 @@ app.layout = html.Div([
     #sidebar,
 
     # Siia renderdatakse lehe sisu  
-    html.Div(id="page-content", style={"marginLeft": "20%", "padding": "20px"})
+    html.Div(id="page-content", style={"marginLeft": "5%", "padding": "20px"})
 ])
 
 
