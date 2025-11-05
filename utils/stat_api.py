@@ -1,7 +1,8 @@
 import requests
-import inspect
 
 import pandas as pd
+
+from utils.helpers import get_meta_options
 from .fetch_data import fetch_data
 
 
@@ -21,14 +22,18 @@ def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
             "code": "Näitaja",
             "selection": {"filter": "item", "values": indicator}
         })
+       
 
-        
-    if emtak is not None:
+    # Tegevusala filter (kohustuslik)
+    if emtak:
+        if isinstance(emtak, str):
+            emtak = [emtak]
         query.append({
             "code": "Tegevusala",
-            "selection": {"filter": "item", "values": [emtak]}
-        }) 
+            "selection": {"filter": "item", "values": emtak}
+        })
 
+    # Aastad
     if years:
         if isinstance(years, (int, str)):
             years = [str(years)]
@@ -39,18 +44,36 @@ def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
             "selection": {"filter": "item", "values": years}
         })
 
-    
+    payload = {"query": query, "response": {"format": "json"}}
+    url = f"https://andmed.stat.ee/api/v1/{lang}/stat/PA103"
+    res = requests.post(url, json=payload)
+    res.raise_for_status()
+    rows = res.json()["data"]
+
+    # Metaandmed dimensioonide järjekorra jaoks
+    meta = requests.get(url).json()
+    variables = [v["code"] for v in meta["variables"]]
+
     #print("PA103 query:", query)
 
-    rows = fetch_data("PA103", query)  # peab tagastama res.json()["data"]
-    
-    # lahti kirjutad key’d arusaadavateks veergudeks
-    return pd.DataFrame([{
-        "näitaja": row["key"][0],
-        "tegevusala": row["key"][1],
-        "aasta": row["key"][2],
-        "väärtus": float(row["values"][0]) if row["values"][0] not in (None, "", ".","..", ":") else None
-    } for row in rows
-      for val in [row["values"][0]]
-])
+    df = pd.DataFrame([
+            {
+                "näitaja": mapping.get("Näitaja"),
+                "tegevusala": mapping.get("Tegevusala"),
+                "aasta": mapping.get("Vaatlusperiood"),
+                "väärtus": float(val) if val not in (None, "", ".", "..", ":") else None
+            }
+            for row in rows
+            for val in [row["values"][0]]
+            for mapping in [dict(zip(variables, row["key"]))]
+        ])
 
+    # Lisa inimloetavad nimetused
+    opts = get_meta_options("PA103", lang)
+    indicator_map = {opt["value"]: opt["label"] for opt in opts["Näitaja"]}
+    df["näitaja_nimi"] = df["näitaja"].map(indicator_map)
+
+    # Kindlusta, et väärtus on numbriline
+    df["väärtus"] = pd.to_numeric(df["väärtus"], errors="coerce")
+
+    return df

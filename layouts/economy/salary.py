@@ -4,79 +4,103 @@ import pandas as pd
 import requests
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from utils.helpers import apply_common_legend
-from utils.stat_api import get_pa103_data
+from utils.helpers import apply_common_legend, get_meta_options
 from translation import translations   # ← import siit
 from dash import Input, Output, html, dcc
 
-# Abifunktsioon metaandmete jaoks
-
-def get_meta_options(table="PA103", lang="et"):
-    url = f"https://andmed.stat.ee/api/v1/{lang}/stat/{table}"
-    meta = requests.get(url).json()
-
-    opts = {}
-    for v in meta["variables"]:
-        code = v["code"]
-        values = v["values"]
-        labels = v["valueTexts"]
-        opts[code] = [{"label": lbl, "value": val} for val, lbl in zip(values, labels)]
-    return opts
 
 def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
+    # Fetch table metadata first so we can use the language-specific variable codes
+    meta_url = f"https://andmed.stat.ee/api/v1/{lang}/stat/PA103"
+    meta = requests.get(meta_url).json()
+    variables = [v["code"] for v in meta.get("variables", [])]
+
+    # Build query using the variable codes from metadata (language-specific)
     query = []
 
-    # Näitaja filter
+    # Näitaja filter (first variable expected to be the indicator)
     if indicator:
         if isinstance(indicator, str):
             indicator = [indicator]
+        code = variables[0] if len(variables) > 0 else "Näitaja"
         query.append({
-            "code": "Näitaja",
+            "code": code,
             "selection": {"filter": "item", "values": indicator}
         })
 
-    # Tegevusala filter (kohustuslik)
+    # Tegevusala filter (second variable)
     if emtak:
         if isinstance(emtak, str):
             emtak = [emtak]
+        code = variables[1] if len(variables) > 1 else "Tegevusala"
         query.append({
-            "code": "Tegevusala",
+            "code": code,
             "selection": {"filter": "item", "values": emtak}
         })
 
-    # Aastad
+    # Aastad (third variable)
     if years:
         if isinstance(years, (int, str)):
             years = [str(years)]
         else:
             years = [str(y) for y in years]
+        code = variables[2] if len(variables) > 2 else "Vaatlusperiood"
         query.append({
-            "code": "Vaatlusperiood",
+            "code": code,
             "selection": {"filter": "item", "values": years}
         })
 
     payload = {"query": query, "response": {"format": "json"}}
-    url = f"https://andmed.stat.ee/api/v1/{lang}/stat/PA103"
+    url = meta_url
     res = requests.post(url, json=payload)
     res.raise_for_status()
     rows = res.json()["data"]
 
-    # DataFrame
-    df = pd.DataFrame([
-        {
-            "näitaja": row["key"][0],
-            "tegevusala": row["key"][1],
-            "aasta": row["key"][2],
-            "väärtus": float(val) if val not in (None, "", ".", "..", ":") else None
-        }
-        for row in rows
-        for val in [row["values"][0]]
-    ])
-
-    # Lisa inimloetavad nimetused
+    # Metaandmete põhjal dimensioonide järjekord
     opts = get_meta_options("PA103", lang)
-    indicator_map = {opt["value"]: opt["label"] for opt in opts["Näitaja"]}
+
+    # DataFrame - build rows safely using variable codes coming from metadata
+    records = []
+    for row in rows:
+        # Build mapping from variable code to value (zip will stop at shortest)
+        mapping = dict(zip(variables, row.get("key", [])))
+
+        # Safely extract by variable code with fallbacks to indexed access if present
+        naitaja = mapping.get("Näitaja") or mapping.get("näitaja")
+        if naitaja is None:
+            naitaja = row.get("key", [None])[0] if len(row.get("key", [])) > 0 else None
+
+        tegevusala = mapping.get("Tegevusala") or mapping.get("tegevusala")
+        if tegevusala is None:
+            tegevusala = row.get("key", [None, None])[1] if len(row.get("key", [])) > 1 else None
+
+        aasta = mapping.get("Vaatlusperiood") or mapping.get("aasta")
+        if aasta is None:
+            aasta = row.get("key", [None, None, None])[2] if len(row.get("key", [])) > 2 else None
+
+        raw_val = row.get("values", [None])[0]
+        try:
+            val = float(raw_val) if raw_val not in (None, "", ".", "..", ":") else None
+        except (TypeError, ValueError):
+            val = None
+
+        records.append({
+            "näitaja": naitaja,
+            "tegevusala": tegevusala,
+            "aasta": aasta,
+            "väärtus": val
+        })
+
+    df = pd.DataFrame(records)
+
+    # Lisa inimloetavad nimetused (kasuta metaandmetest saadud keele-spetsiifilisi koode)
+    if len(variables) > 0:
+        ind_code = variables[0]
+    else:
+        ind_code = "Näitaja"
+    indicator_map = {opt["value"]: opt["label"] for opt in opts.get(ind_code, [])}
     df["näitaja_nimi"] = df["näitaja"].map(indicator_map)
+    df["väärtus"] = pd.to_numeric(df["väärtus"], errors="coerce")
 
     return df
 
@@ -153,20 +177,31 @@ def register_salary_callbacks(app):
     
     def update_salary_filters(pathname, lang):
         opts = get_meta_options("PA103", lang)
-        #print("metandmed", opts)
-        indicator_map = {opt["value"]: opt["label"] for opt in opts["Näitaja"]}
-        #[{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + 
-        indicator_opts = [{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + opts["Näitaja"]
-        emtak_opts = opts["Tegevusala"]
-        #[{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + 
-        year_opts = [{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + opts["Vaatlusperiood"]
+        # Determine language-specific variable codes from opts keys (order preserved)
+        var_codes = list(opts.keys())
+        ind_code = var_codes[0] if len(var_codes) > 0 else "Näitaja"
+        emtak_code = var_codes[1] if len(var_codes) > 1 else "Tegevusala"
+        year_code = var_codes[2] if len(var_codes) > 2 else "Vaatlusperiood"
+
+        indicator_map = {opt["value"]: opt["label"] for opt in opts.get(ind_code, [])}
+        indicator_opts = [{"label": translations[lang]["Allindicator.label"], "value": "ALL"}] + opts.get(ind_code, [])
+
+        # Add an "All" option that maps to the API's TOTAL code for all sectors
+        emtak_opts = [{"label": translations[lang]["Allemtak.label"], "value": "TOTAL"}] + sorted(opts.get(emtak_code, []), key=lambda x: x.get("label", ""))
+
+        year_opts = [{"label": translations[lang]["Allperiod.label"], "value": "ALL"}] + opts.get(year_code, [])
+
+        # Default indicator value: first real option if available
+        default_indicator = indicator_opts[1]["value"] if len(indicator_opts) > 1 else indicator_opts[0]["value"]
+
+        # Default year value: first actual year option if available
+        default_year = year_opts[1]["value"] if len(year_opts) > 1 else year_opts[0]["value"]
 
         return (
-            indicator_opts, indicator_opts[1]["value"],  # vaikimisi esimene päris näitaja
-            emtak_opts, "TOTAL",                        # vaikimisi TOTAL
-            year_opts, year_opts[0]["value"]           # vaikimisi viimane aasta   
-
-    )
+            indicator_opts, default_indicator,
+            emtak_opts, "TOTAL",
+            year_opts, default_year
+        )
 
     # Graafiku uuendamine
 
@@ -226,6 +261,8 @@ def register_salary_callbacks(app):
             )
 
             # Muutus paremale teljele joonena
+            dif_df["väärtus"] = pd.to_numeric(dif_df["väärtus"], errors="coerce")
+
             fig.add_trace(
                 go.Scatter(
                     x=dif_df["aasta"],
