@@ -85,19 +85,37 @@ def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
 
 def salary_layout(lang="et"):
 
-     # Esialgne demo-graafik (TOTAL, GR_W_AVG, kõik aastad)
-    df = get_pa103_data(indicator="GR_W_AVG", emtak="TOTAL")
+    # Esialgne demo-graafik (TOTAL, GR_W_AVG, kõik aastad)
+    df = get_pa103_data(indicator="GR_W_AVG", emtak="TOTAL", lang=lang)
 
-    fig = px.bar(
-        df,
-        x="aasta",
-        y="väärtus",
-        title=translations[lang]["salary.title"],
-        labels={
-            "väärtus": translations[lang]["salary.label"],
-             "aasta": translations[lang]["year.label"]
-            }
+    # Loo subplot kahe y-telje võimalusega
+    fig = make_subplots(specs=[[{"secondary_y": True}]])
+
+    # Lisa keskmise palga tulbad vasakule teljele
+    fig.add_trace(
+        go.Bar(
+            x=df["aasta"],
+            y=df["väärtus"],
+            name=df["näitaja_nimi"].iloc[0],
+            text=df["väärtus"],
+            textposition="inside",
+            textfont=dict(color="white", size=12)
+        ),
+        secondary_y=False
     )
+
+    # Telgede sätted
+    fig.update_yaxes(title_text=translations[lang]["salary.label"], range=[0, None], secondary_y=False)
+    fig.update_yaxes(title_text=translations[lang]["salarychange"], range=[0, None], secondary_y=True)
+
+    # Üldine layout
+    fig.update_layout(
+        title=translations[lang]["salary.title"],
+        height=600
+    )
+
+    # Legend alla keskele
+    fig = apply_common_legend(fig, "h", -0.3, 0.5)
 
     return html.Div([
         html.H3(translations[lang]["salary_header"]),
@@ -181,32 +199,51 @@ def register_salary_callbacks(app):
             med_df = df[df["näitaja"] == "GR_W_D5"]
             dif_df = df[df["näitaja"] == "GR_W_AVG_SM"]
             
-            print(avg_df, med_df, dif_df)
+            #print(avg_df, med_df, dif_df)
 
             # Keskmine ja mediaan vasakule teljele
             fig.add_trace(
-                go.Bar(x=avg_df["aasta"], y=avg_df["väärtus"], name=avg_df["näitaja_nimi"].iloc[0]),
+                go.Bar(
+                    x=avg_df["aasta"],
+                    y=avg_df["väärtus"],
+                    name=avg_df["näitaja_nimi"].iloc[0],
+                    text=avg_df["väärtus"],
+                    textposition="inside",
+                    textfont=dict(color="white", size=12)  # ← teksti värv ja suurus
+                    ),
                 secondary_y=False
             )
 
             fig.add_trace(
-                go.Bar(x=med_df["aasta"], y=med_df["väärtus"], name=med_df["näitaja_nimi"].iloc[0]),
+                go.Bar(x=med_df["aasta"],
+                       y=med_df["väärtus"],
+                       name=med_df["näitaja_nimi"].iloc[0],
+                       text=med_df["väärtus"],
+                       textposition="inside",
+                       textfont=dict(color="white", size=12)  # ← teksti värv ja suurus
+                       ),
                 secondary_y=False
             )
 
             # Muutus paremale teljele joonena
             fig.add_trace(
-                go.Scatter(x=dif_df["aasta"], y=dif_df["väärtus"],
-                        name=dif_df["näitaja_nimi"].iloc[0], mode="lines+markers"),                        
+                go.Scatter(
+                    x=dif_df["aasta"],
+                    y=dif_df["väärtus"],
+                    name=dif_df["näitaja_nimi"].iloc[0],
+                    mode="lines+markers+text",
+                    text=dif_df["väärtus"].round(1),
+                    textposition="bottom center"
+                    ),                        
                 secondary_y=True
             )
 
         # Telgede sildid
             fig.update_yaxes(title_text=translations[lang]["salary.label"], secondary_y=False)
             #title_text="Palga muutus (%)",
-            fig.update_yaxes(title_text="Palga muutus (%)",secondary_y=True)
+            fig.update_yaxes(range=[0, None], title_text=translations[lang]["salarychange"], secondary_y=True)
             
-            fig.update_layout(title=translations[lang]["salary.title"])
+            fig.update_layout(title=translations[lang]["salary.title"], height=600)
            
             #legendi paigutus alla keskele
             fig = apply_common_legend(fig, "h", -0.3, 0.5) 
@@ -219,12 +256,18 @@ def register_salary_callbacks(app):
                   y="väärtus",
                   color="näitaja_nimi",
                   barmode="group",
+                  text="väärtus",   # ← veeru nimi stringina
                   labels={
                     "väärtus": translations[lang]["salary.label"],
                     "aasta": translations[lang]["year.label"],
                     "näitaja_nimi": translations[lang]["indicator.label"]
                 }
             )
+
+            fig.update_yaxes(
+                range=[0, None]
+            )
+
         # Legend alla keskele
         fig = apply_common_legend(fig, "h", -0.3, 0.5)  
         return fig
