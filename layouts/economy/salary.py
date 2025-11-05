@@ -7,6 +7,7 @@ from plotly.subplots import make_subplots
 from utils.helpers import apply_common_legend, get_meta_options
 from translation import translations   # ← import siit
 from dash import Input, Output, html, dcc
+import traceback
 
 
 def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
@@ -215,99 +216,113 @@ def register_salary_callbacks(app):
     )
 
     def update_salary_graph(indicator, emtak, year, lang):
-        # Kui kasutaja valib "ALL", siis lisa kõik väärtused
-        
-        indicators = None if indicator == "ALL" else indicator
-        years = None if year == "ALL" else year
+        try:
+            # Kui kasutaja valib "ALL", siis lisa kõik väärtused
+            indicators = None if indicator == "ALL" else indicator
+            years = None if year == "ALL" else year
 
-        df = get_pa103_data(indicator=indicators, emtak=emtak, years=years, lang=lang)
+            df = get_pa103_data(indicator=indicators, emtak=emtak, years=years, lang=lang)
 
-        #print("indikaatorid" , indicators)
+            # Kui mõlemad näitajad korraga
+            if indicator is None or indicator == "ALL":
 
-        # Kui mõlemad näitajad korraga
-        #if isinstance(indicators, list) and "GR_W_AVG" in indicators and "GR_W_D5" in indicators:
-        if indicator is None or indicator == "ALL":
+                fig = make_subplots(specs=[[{"secondary_y": True}]])
 
-            fig = make_subplots(specs=[[{"secondary_y": True}]])
+                avg_df = df[df["näitaja"] == "GR_W_AVG"]
+                med_df = df[df["näitaja"] == "GR_W_D5"]
+                dif_df = df[df["näitaja"] == "GR_W_AVG_SM"]
 
-            avg_df = df[df["näitaja"] == "GR_W_AVG"]
-            med_df = df[df["näitaja"] == "GR_W_D5"]
-            dif_df = df[df["näitaja"] == "GR_W_AVG_SM"]
-            
-            #print(avg_df, med_df, dif_df)
+                # Avoid SettingWithCopyWarning by working on copies when we'll modify columns
+                avg_df = avg_df.copy()
+                med_df = med_df.copy()
+                dif_df = dif_df.copy()
 
-            # Keskmine ja mediaan vasakule teljele
-            fig.add_trace(
-                go.Bar(
-                    x=avg_df["aasta"],
-                    y=avg_df["väärtus"],
-                    name=avg_df["näitaja_nimi"].iloc[0],
-                    text=avg_df["väärtus"],
-                    textposition="inside",
-                    textfont=dict(color="white", size=12)  # ← teksti värv ja suurus
+                # Helper to get a safe series name
+                def safe_name(df_slice, default_label):
+                    try:
+                        return df_slice["näitaja_nimi"].iloc[0] if not df_slice.empty else default_label
+                    except Exception:
+                        return default_label
+
+                avg_name = safe_name(avg_df, translations[lang].get("avg.label", "Average"))
+                med_name = safe_name(med_df, translations[lang].get("med.label", "Median"))
+                dif_name = safe_name(dif_df, translations[lang].get("diff.label", "Difference"))
+
+                # Keskmine ja mediaan vasakule teljele
+                fig.add_trace(
+                    go.Bar(
+                        x=avg_df["aasta"],
+                        y=avg_df["väärtus"],
+                        name=avg_name,
+                        text=avg_df["väärtus"],
+                        textposition="inside",
+                        textfont=dict(color="white", size=12)
                     ),
-                secondary_y=False
-            )
+                    secondary_y=False
+                )
 
-            fig.add_trace(
-                go.Bar(x=med_df["aasta"],
-                       y=med_df["väärtus"],
-                       name=med_df["näitaja_nimi"].iloc[0],
-                       text=med_df["väärtus"],
-                       textposition="inside",
-                       textfont=dict(color="white", size=12)  # ← teksti värv ja suurus
-                       ),
-                secondary_y=False
-            )
+                fig.add_trace(
+                    go.Bar(
+                        x=med_df["aasta"],
+                        y=med_df["väärtus"],
+                        name=med_name,
+                        text=med_df["väärtus"],
+                        textposition="inside",
+                        textfont=dict(color="white", size=12)
+                    ),
+                    secondary_y=False
+                )
 
-            # Muutus paremale teljele joonena
-            dif_df["väärtus"] = pd.to_numeric(dif_df["väärtus"], errors="coerce")
+                # Muutus paremale teljele joonena
+                dif_df["väärtus"] = pd.to_numeric(dif_df["väärtus"], errors="coerce")
 
-            fig.add_trace(
-                go.Scatter(
-                    x=dif_df["aasta"],
-                    y=dif_df["väärtus"],
-                    name=dif_df["näitaja_nimi"].iloc[0],
-                    mode="lines+markers+text",
-                    text=dif_df["väärtus"].round(1),
-                    textposition="bottom center"
-                    ),                        
-                secondary_y=True
-            )
+                fig.add_trace(
+                    go.Scatter(
+                        x=dif_df["aasta"],
+                        y=dif_df["väärtus"],
+                        name=dif_name,
+                        mode="lines+markers+text",
+                        text=dif_df["väärtus"].round(1),
+                        textposition="bottom center"
+                    ),
+                    secondary_y=True
+                )
 
-        # Telgede sildid
-            fig.update_yaxes(title_text=translations[lang]["salary.label"], secondary_y=False)
-            #title_text="Palga muutus (%)",
-            fig.update_yaxes(range=[0, None], title_text=translations[lang]["salarychange"], secondary_y=True)
-            
-            fig.update_layout(title=translations[lang]["salary.title"], height=600)
-           
-            #legendi paigutus alla keskele
-            fig = apply_common_legend(fig, "h", -0.3, 0.5) 
+                # Telgede sildid
+                fig.update_yaxes(title_text=translations[lang]["salary.label"], secondary_y=False)
+                fig.update_yaxes(range=[0, None], title_text=translations[lang]["salarychange"], secondary_y=True)
+                fig.update_layout(title=translations[lang]["salary.title"], height=600)
+                fig = apply_common_legend(fig, "h", -0.3, 0.5)
 
-        # Kui ainult üks näitaja
-        else:
-            fig = px.bar(
-                  df,
-                  x="aasta",
-                  y="väärtus",
-                  color="näitaja_nimi",
-                  barmode="group",
-                  text="väärtus",   # ← veeru nimi stringina
-                  labels={
-                    "väärtus": translations[lang]["salary.label"],
-                    "aasta": translations[lang]["year.label"],
-                    "näitaja_nimi": translations[lang]["indicator.label"]
-                }
-            )
+            else:
+                # Kui ainult üks näitaja
+                fig = px.bar(
+                    df,
+                    x="aasta",
+                    y="väärtus",
+                    color="näitaja_nimi",
+                    barmode="group",
+                    text="väärtus",
+                    labels={
+                        "väärtus": translations[lang]["salary.label"],
+                        "aasta": translations[lang]["year.label"],
+                        "näitaja_nimi": translations[lang]["indicator.label"]
+                    }
+                )
 
-            fig.update_yaxes(
-                range=[0, None]
-            )
+                fig.update_yaxes(range=[0, None])
 
-        # Legend alla keskele
-        fig = apply_common_legend(fig, "h", -0.3, 0.5)  
-        return fig
+            # Legend alla keskele
+            fig = apply_common_legend(fig, "h", -0.3, 0.5)
+            return fig
+
+        except Exception as e:
+            # Log exception server-side and return a simple figure with the error so the client receives a response
+            print("Error in update_salary_graph:", e)
+            traceback.print_exc()
+            err_fig = go.Figure()
+            err_fig.update_layout(title=f"Error generating chart: {e}")
+            return err_fig
 
 
 
