@@ -12,12 +12,10 @@ import traceback
 import textwrap
 
 def get_pa103_data(indicator=None, emtak="TOTAL", years=None, lang="et"):
-
     # Fetch table metadata first so we can use the language-specific variable codes
     meta_url = f"https://andmed.stat.ee/api/v1/{lang}/stat/PA103"
     meta = requests.get(meta_url).json()
 
-    #print("metadata", meta)
     variables = [v["code"] for v in meta.get("variables", [])]
 
     # Build query using the variable codes from metadata (language-specific)
@@ -136,8 +134,6 @@ def salary_layout(lang="et"):
         years=latest_year,
         lang=lang)
 
-    #print(df2)
-
     # Loo subplot kahe y-telje võimalusega
     fig = make_subplots(specs=[[{"secondary_y": True}]])
     fig2 = make_subplots(specs=[[{"secondary_y": True}]])
@@ -156,6 +152,8 @@ def salary_layout(lang="et"):
         columns="näitaja",
         values="väärtus"
     ).reset_index()
+
+    #print(" 156 df2_wide", df2_wide)
 
     # Determine which indicator columns exist (avg vs med) and drop activities with no values for both
     indicator_cols = [c for c in ["GR_W_AVG", "GR_W_D5"] if c in df2_wide.columns]
@@ -192,19 +190,20 @@ def salary_layout(lang="et"):
         activity_map = {item["value"]: item["label"] for item in opts.get(activity_key, [])}
         # create a human-readable column and replace the kode values for plotting
         df2_wide_sorted["tegevusala"] = df2_wide_sorted["tegevusala"].map(activity_map).fillna(df2_wide_sorted["tegevusala"])
-       # print("tegevusala", df2_wide_sorted["tegevusala"])
        
     # Wrap long activity names so they break into multiple lines in the chart.
-    def wrap_label(s, width=25):
+    def wrap_label(s, width=50):
         try:
             # textwrap.fill will break at word boundaries and insert '\n'
-            return textwrap.fill(str(s), width=width)
+            #return textwrap.fill(str(s), width=width)
+            return "<br>".join(textwrap.wrap(str(s), width=width))
         except Exception:
             return s
 
     # Add a wrapped label column and use it for plotting and ordering
-    df2_wide_sorted["tegevusala_wrapped"] = df2_wide_sorted["tegevusala"].apply(lambda s: wrap_label(s, width=25))
+    df2_wide_sorted["tegevusala_wrapped"] = df2_wide_sorted["tegevusala"].apply(lambda s: wrap_label(s, width=50))
     order = df2_wide_sorted["tegevusala_wrapped"].tolist()
+    #print("order 203",order)
 
 
     # Lisa keskmise palga tulbad vasakule teljele
@@ -220,22 +219,28 @@ def salary_layout(lang="et"):
         secondary_y=False
     )
     # Build fig2 with explicit traces so ordering is deterministic
-    avg_name = translations[lang].get("salary.avg.label", "Keskmine palk")
+    #avg_name = translations[lang].get("salary.avg.label", "Keskmine palk")
+    avg_name = translations[lang]["salary.label"]
     med_name = translations[lang].get("salary.med.label", "Mediaan palk")
-
+    #fig.update_yaxes(title_text=translations[lang]["salary.label"], range=[0, None], secondary_y=False)
     avg_trace = go.Bar(
         y=df2_wide_sorted["tegevusala_wrapped"],
         x=df2_wide_sorted.get("GR_W_AVG"),
-        name=avg_name,
+        name=translations[lang]["salary.average.Label"],
+        text = df2_wide_sorted.get("GR_W_AVG"),
+        textfont=dict(color="white", size=12),
         orientation="h",
         offsetgroup="1",
         legendrank=1
     )
-
+    print("235 wide sorted", df)
     med_trace = go.Bar(
         y=df2_wide_sorted["tegevusala_wrapped"],
         x=df2_wide_sorted.get("GR_W_D5"),
-        name=med_name,
+        name=translations[lang]["salary.median.Label"],
+        text = df2_wide_sorted.get("GR_W_D5"),
+        textposition="inside",
+        textfont=dict(color="white", size=12),
         orientation="h",
         offsetgroup="2",
         legendrank=2
@@ -257,8 +262,8 @@ def salary_layout(lang="et"):
     
     fig.update_layout(
         barmode="group",
-        title=f"Keskmine vs Mediaan palk tegevusalade kaupa ({latest_year})",
-        xaxis_title="Palk (€)",
+        title=translations[lang].get("salary_avg_vs_median", "Keskmine vs Mediaan palk tegevusalade kaupa ({year})").format(year=latest_year),
+        xaxis_title=translations[lang]["salary.label"],
         yaxis_title="Tegevusala"
     )
 
@@ -267,19 +272,21 @@ def salary_layout(lang="et"):
     # and control legend placement afterwards.
     fig2.update_layout(
         barmode="group",
-        title=f"Keskmine vs Mediaan palk tegevusalade kaupa ({latest_year})",
-        xaxis_title="Palk (€)",
+        title=translations[lang].get("salary_avg_vs_median", "Keskmine vs Mediaan palk tegevusalade kaupa ({year})").format(year=latest_year),
+        xaxis_title=translations[lang]["salary.label"],
         # remove yaxis_title as requested and restore larger height
-        height=2700,
+        height=3700,
         margin=dict(l=120, r=40, t=100, b=90),
         yaxis=dict(
             categoryorder="array",     # ära lase tähestikulisel järjekorral üle kirjutada
             categoryarray=order,
             automargin=True,
-            tickfont=dict(size=12)
-        )
+            tickfont=dict(size=12),
+            ticklabelposition="outside top",
+            ticklabelstandoff=10 
+        )        
     )
-
+    #print("order 278", order) 
 
     # Telgede sätted
     fig.update_yaxes(title_text=translations[lang]["salary.label"], range=[0, None], secondary_y=False)
@@ -315,8 +322,7 @@ def salary_layout(lang="et"):
 
         dcc.Graph(id="salary-graph", figure=fig),
         dcc.Graph(id="salary-comparison", figure=fig2),
-            html.P("Keskmine palk võib olla mõjutatud väga kõrgetest väärtustest, "
-                "mediaan näitab tüüpilist töötajat.")        
+        html.P(translations[lang]["salaryNotice"])
     ])
 
 # Callbackid
@@ -336,7 +342,7 @@ def register_salary_callbacks(app):
     
     def update_salary_filters(pathname, lang):
         opts = get_meta_options("PA103", lang)
-
+  
         # Determine language-specific variable codes from opts keys (order preserved)
         var_codes = list(opts.keys())
         ind_code = var_codes[0] if len(var_codes) > 0 else "Näitaja"
@@ -352,10 +358,10 @@ def register_salary_callbacks(app):
         year_opts = [{"label": translations[lang]["Allperiod.label"], "value": "ALL"}] + opts.get(year_code, [])
 
         # Default indicator value: first real option if available
-        default_indicator = indicator_opts[1]["value"] if len(indicator_opts) > 1 else indicator_opts[0]["value"]
+        default_indicator = indicator_opts[0]["value"] if len(indicator_opts) > 1 else indicator_opts[0]["value"]
 
         # Default year value: first actual year option if available
-        default_year = year_opts[1]["value"] if len(year_opts) > 1 else year_opts[0]["value"]
+        default_year = year_opts[0]["value"] if len(year_opts) > 1 else year_opts[0]["value"]
 
         return (
             indicator_opts, default_indicator,
@@ -487,15 +493,14 @@ def register_salary_callbacks(app):
     #    Output("salary-comparison", "figure"),
      #   Input("language-dropdown", "value")
     #)
+    """
     def update_salary_comparison(lang):
        
         opts = get_meta_options("PA103", lang)
         var_codes = list(opts.keys())
-        #print("codes",  var_codes)
 
         emtak_code = var_codes[1]["values"]
-        #print("tegevusalad", emtak_code)
-        # Andmete päring (nt SQL või API)
+         # Andmete päring (nt SQL või API)
         
         df2 = get_pa103_data(
             indicator=["GR_W_AVG","GR_W_D5"],
@@ -523,6 +528,7 @@ def register_salary_callbacks(app):
             yaxis_title=translations[lang]["salary.comparison.yaxis"]
         )
         return fig
+        """
 
 
 

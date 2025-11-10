@@ -1,15 +1,15 @@
 import requests
 
 
-def apply_common_legend(fig, orientation, y, x):
+def apply_common_legend(fig, orientation, y, x, yanchor="bottom", xanchor="center"):
     """Lisa graafikule ühtne legendi paigutus (alla keskele)."""
     fig.update_layout(
         legend=dict(
             orientation= orientation,
-            yanchor="bottom",
-            y = y,
-            xanchor="center",
-            x = x
+            yanchor=yanchor,
+            y=y,
+            xanchor=xanchor,
+            x=x
         )
     )
     return fig
