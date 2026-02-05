@@ -26,8 +26,9 @@ def salary_short_layout(lang="et"):
     )
     
     return html.Div([
-            dcc.Graph(id="salary-graph-short", figure=fig),
-            html.P(translations[lang]["salaryNotice"])         
+        html.H3(translations[lang]["salary_short_header"]),
+        dcc.Graph(id="salary-graph-short", figure=fig),
+        html.P(translations[lang]["salaryNotice"])         
 
 ])
 

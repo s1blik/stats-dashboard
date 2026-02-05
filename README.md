@@ -1,7 +1,7 @@
 # Stats Dashboard
 
 Interaktiivne **Python Dash** rakendus, mis visualiseerib avalikke statistikaandmeid.  
-Projekt on loodud eesmärgiga demonstreerida minu oskust ühendada andmeallikad (API/CSV)  
+Projekt on loodud eesmärgiga demonstreerida minu oskust ühendada andmeallikad (API)  
 interaktiivseks dashboardiks koos dünaamilise tõlkesüsteemiga.
 
 ## Kasutatud tehnoloogiad
@@ -11,7 +11,7 @@ interaktiivseks dashboardiks koos dünaamilise tõlkesüsteemiga.
 - Requests (API päringud)  
 
 ## Funktsionaalsus
-- Andmete laadimine API või CSV failist  
+- Andmete laadimine API -st 
 - Dünaamilised graafikud ja tabelid  
 - Keelevalik (nt eesti/inglise) koos tõlkesüsteemiga  
 - Selge ja modulaarne projekti struktuur (`components/`, `services/`, `utils/`)  
@@ -36,5 +36,3 @@ python app.py
 
  ![alt text](image.png)
 
-5. Töötav näidis:
-https://stats-dashboard-ev7j.onrender.com/

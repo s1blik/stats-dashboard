@@ -304,6 +304,7 @@ def salary_layout(lang="et"):
     # the plotting area without too much extra whitespace.
     fig2 = apply_common_legend(fig2, "h", -0.04, 0.5)
 
+    # Lehe sisu
     return html.Div([
         html.H3(translations[lang]["salary_header"]),
         html.Div([

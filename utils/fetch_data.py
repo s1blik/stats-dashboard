@@ -11,7 +11,7 @@ def fetch_data(table: str, query: list, lang: str = "et"): #-> pd.DataFrame:
     :param lang: "et" või "en" – API keeleversioon
     :return: pandas DataFrame toorandmetega
     """
-    print("PA103 query:", query)
+    #print("PA103 query:", query)
 
     url = f"https://andmed.stat.ee/api/v1/{lang}/stat/{table}"
     payload = {

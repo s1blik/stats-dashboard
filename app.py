@@ -71,11 +71,12 @@ app.layout = html.Div([
             dcc.Textarea(id="user_input", style={"border":"None","width": "400px", "height": "100px"})
             ], 
             style={
-            "margins": "10px",
-            "alignSelf": "center",
-            "border": "1px solid black",
-            "flexDirection": "column",
-            "alignItems": "center"
+                "display":"none", 
+                "margins": "10px",
+                "alignSelf": "center",
+                "border": "1px solid black",
+                "flexDirection": "column",
+                "alignItems": "center"
             }),
         
                 
@@ -84,13 +85,11 @@ app.layout = html.Div([
             children=html.Div(id="gpt_response"), style={"alignItems": "center"}),
         dcc.Store(id="loading_state", data=False)  # False = not loading
     ], 
-        style={
-        "display": "flex",
-        "justifyContent": "flex-end",
-        #"flexDirection": "column",   # pane komponendid üksteise alla
-        #"alignItems": "center",      # joonda keskele horisontaalselt
-        "marginLeft": "14%",
-        "padding": "10px"
+        style={            
+            "display": "flex",
+            "justifyContent": "flex-end",
+            "marginLeft": "14%",
+            "padding": "10px"
     }),
 
     # Siia renderdatakse lehe sisu  
